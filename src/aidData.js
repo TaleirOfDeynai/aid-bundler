@@ -6,7 +6,6 @@ class AIDData {
     this.worldEntries = worldEntries
     this.history = history
     this.useAI = true
-    delete state.message
   }
 
   finalizeOutput () {

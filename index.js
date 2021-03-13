@@ -15,6 +15,7 @@ class Pipeline {
 
   build () {
     global.inputModifier = (text, state, info, worldEntries, history) => {
+      delete state.message
       const data = new AIDData(text, state, info, worldEntries, history)
       const command = this.commandHandler.checkCommand(data)
 
