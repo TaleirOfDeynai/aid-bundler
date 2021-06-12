@@ -15,8 +15,38 @@ const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
  */
 const reCommand = (prefix) => new RegExp(`^${escapeRegExp(prefix)}(.+?)(?:\\s+(.+))?$`)
 
-/** Matches the fluff words added to a player's input for removal. */
-const reRemoveFluff = /^(?:\s*|>\s+)?(?:[yY]ou\s+)?(?:say\s+)?"?(.+?)"?$/
+/**
+ * Matches the fluff words added to a player's input for removal.
+ * 
+ * @type {Record<string, RegExp>}
+ */
+const fluffRemovers = {
+  /**
+   * Do mode adds a period to the end of the input except when:
+   * - The input ends with: `"`
+   * - The input ends with: `.`
+   * 
+   * There's no reliable way to tell if the period was provided by the player
+   * or not, unfortunately, so we're just going to discard it.
+   */
+  do: /^>\s+(?:[yY]ou\s+)?(.+?)\.?$/,
+  /**
+   * Say mode adds double-quotes to the end of the input unless the input already
+   * ends with double-quotes.  This makes it a little tricky to parse commands
+   * that are using quoted arguments.
+   */
+  say: /^> [yY]ou\ssay\s+"([^"]+?|.+?")"?$/,
+  /** Story mode always sends text as the player submitted it. */
+  story: /^.*$/
+}
+
+const removeFluff = (text) => {
+  for (const mode of Object.keys(fluffRemovers)) {
+    const [, rawText] = fluffRemovers[mode].exec(text) || []
+    if (rawText) return rawText
+  }
+  return undefined
+}
 
 /**
  * Splits command arguments apart.  Arguments wrapped in double-quotes will be kept
@@ -44,7 +74,7 @@ class CommandHandler {
   }
 
   checkCommand (data) {
-    const [, rawText] = reRemoveFluff.exec(data.text.trim()) ?? []
+    const rawText = removeFluff(data.text.trim())
     if (!rawText) return undefined
 
     const [, cmd, arg = ''] = reCommand(this.commandPrefix).exec(rawText) ?? []
