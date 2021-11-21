@@ -1,3 +1,5 @@
+const DOUBLE_QUOTE = `"`
+
 /**
  * Makes a string safe to be used in a RegExp matcher.
  *
@@ -16,36 +18,35 @@ const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 const reCommand = (prefix) => new RegExp(`^${escapeRegExp(prefix)}(.+?)(?:\\s+(.+))?$`)
 
 /**
- * Matches the fluff words added to a player's input for removal.
+ * Attempts to match a regex on the given text and return its first match-group.
+ * If it fails to match, the result will be `undefined`.
  * 
- * @type {Record<string, RegExp>}
+ * @param {RegExp} regex 
+ * @param {string} text 
+ * @returns {string | undefined}
  */
-const fluffRemovers = {
-  /**
-   * Do mode adds a period to the end of the input except when:
-   * - The input ends with: `"`
-   * - The input ends with: `.`
-   * 
-   * There's no reliable way to tell if the period was provided by the player
-   * or not, unfortunately, so we're just going to discard it.
-   */
-  do: /^>\s+(?:[yY]ou\s+)?(.+?)\.?$/,
-  /**
-   * Say mode adds double-quotes to the end of the input unless the input already
-   * ends with double-quotes.  This makes it a little tricky to parse commands
-   * that are using quoted arguments.
-   */
-  say: /^> [yY]ou\ssay\s+"([^"]+?|.+?")"?$/,
-  /** Story mode always sends text as the player submitted it. */
-  story: /^.*$/
+const tryToExtract = (regex, text) => {
+  const [, rawText] = regex.exec(text) || []
+  return rawText || undefined
 }
 
 const removeFluff = (text) => {
-  for (const mode of Object.keys(fluffRemovers)) {
-    const [, rawText] = fluffRemovers[mode].exec(text) || []
-    if (rawText) return rawText
-  }
-  return undefined
+  let rawText = ""
+
+  // Say mode adds double-quotes to the end of the input unless the input already
+  // ends with double-quotes.  This makes it a little tricky to parse commands
+  // that are using quoted arguments.
+  rawText = tryToExtract(/^> [yY]ou\s+say\s+"(.+?)"$/, text)
+  if (rawText) return rawText
+
+  // Do mode adds a period to the end of the input except when it ends with `.`
+  // or `"`.  There's no reliable way to tell if the period was provided by the
+  // player or not, unfortunately, so we're just going to discard it.
+  rawText = tryToExtract(/^>\s+(?:[yY]ou\s+)(.+?)\.?$/, text)
+  if (rawText) return rawText
+
+  // Finally, Story mode gives us the input as the player entered it.
+  return text
 }
 
 /**
@@ -58,7 +59,21 @@ const removeFluff = (text) => {
 const splitArgs = (arg) => {
   arg = arg.trim()
   if (!arg) return []
-  return arg.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []
+
+  const matches = arg.match(/(?:".+?(?:"|$)|[^\s"]+)+/g)
+  if (!matches?.length) return []
+
+  // In Say mode, it is possible for the final `"` character to be chopped off.
+  // If we see an argument that starts with `"` but doesn't end with `"`, we
+  // will just assume that's what happened and correct it for consistency.
+
+  const lastIndex = matches.length - 1
+  const lastArg = matches[lastIndex]
+  if (lastArg.startsWith(DOUBLE_QUOTE) && !lastArg.endsWith(DOUBLE_QUOTE)) {
+    matches[lastIndex] = `${lastArg}"`
+  }
+
+  return matches
 }
 
 class CommandHandler {
